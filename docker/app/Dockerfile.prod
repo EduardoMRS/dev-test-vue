@@ -1,0 +1,118 @@
+# ============================================================
+# Stage 1: Builder — PHP + Composer + Node + Vite build
+# Precisamos de PHP aqui porque o plugin wayfinder chama
+# `php artisan wayfinder:generate` durante o `vite build`.
+# ============================================================
+FROM dunglas/frankenphp:1.3-php8.3-bookworm AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        unzip \
+        zip \
+        curl \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install pdo_mysql bcmath
+
+# Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Node 20
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /var/www/html
+
+# --- Composer dependencies (camada cacheável) ---
+COPY composer.json ./
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-scripts
+
+# --- Node dependencies (camada cacheável) ---
+COPY package.json ./
+RUN npm install --no-audit --no-fund
+
+# --- Código da aplicação ---
+COPY . .
+
+# Gera .env mínimo inline — sem depender de arquivos externos do repositório.
+# O wayfinder chama `php artisan` durante o vite build; precisa de APP_KEY,
+# drivers sem dependências externas e caminhos explícitos para o Blade compiler.
+RUN printf 'APP_NAME=Laravel\n\
+APP_ENV=local\n\
+APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n\
+APP_DEBUG=false\n\
+APP_URL=http://localhost\n\
+DB_CONNECTION=sqlite\n\
+DB_DATABASE=:memory:\n\
+CACHE_STORE=array\n\
+SESSION_DRIVER=array\n\
+QUEUE_CONNECTION=sync\n\
+LOG_CHANNEL=stderr\n\
+LOG_LEVEL=error\n\
+VIEW_COMPILED_PATH=/var/www/html/storage/framework/views\n' > .env
+
+# post-autoload-dump (gera facades, ide-helper, etc.)
+RUN composer run-script post-autoload-dump --no-interaction 2>/dev/null || true
+
+# Cria diretórios de runtime necessários para o artisan funcionar no build
+# (wayfinder:generate usa o Blade compiler que exige storage/framework/views)
+RUN mkdir -p storage/framework/{sessions,views,cache} bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+# Build dos assets de frontend
+RUN npm run build
+
+# ============================================================
+# Stage 2: Production Runtime — imagem limpa sem build tools
+# ============================================================
+FROM dunglas/frankenphp:1.3-php8.3-bookworm AS production
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        unzip \
+        zip \
+        curl \
+        ca-certificates \
+        netcat-openbsd \
+        default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN docker-php-ext-install pdo_mysql bcmath
+
+# Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Node 20 + npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /var/www/html
+
+# Código da aplicação (sem node_modules, vendor, .env — sobrescritos abaixo)
+COPY . .
+
+# Vendor otimizado (--no-dev) do builder
+COPY --from=builder /var/www/html/vendor ./vendor
+
+# Assets compilados do Vite
+COPY --from=builder /var/www/html/public/build ./public/build
+
+RUN mkdir -p storage/framework/{sessions,views,cache} bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
+
+COPY ./docker/app/entrypoint.prod.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

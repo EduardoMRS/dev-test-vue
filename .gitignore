@@ -1,0 +1,45 @@
+# Laravel
+/vendor/
+/node_modules/
+/public/build/
+/public/hot
+/public/storage
+/storage/*.key
+/storage/app/public/
+/storage/app/private/
+/storage/debugbar/
+/storage/framework/
+/storage/logs/
+/bootstrap/cache/
+.env*
+.env.*
+!.env.example*
+.phpunit.result.cache
+
+# System
+.DS_Store
+Thumbs.db
+*.log
+*.swo
+*.swp
+*.tmp
+
+# IDEs and editors
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Misc
+composer.lock
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Others
+artifacts/
+*.bak
+*.old
+*.orig
+*.rej
+public/sw.js

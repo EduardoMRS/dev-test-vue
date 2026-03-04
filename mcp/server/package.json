@@ -1,0 +1,21 @@
+{
+  "name": "laravel-vue-template-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for the Laravel + Vue Template project",
+  "type": "module",
+  "bin": {
+    "mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}

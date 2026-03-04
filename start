@@ -1,0 +1,6 @@
+#!/bin/sh
+# utilizado para fazer inicialização do container
+# e corrigir o erro de permissão apontado no laravel no storage
+
+./fix_permissions
+docker compose up -d

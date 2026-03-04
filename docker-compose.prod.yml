@@ -1,0 +1,98 @@
+# Docker Compose — Produção
+# Uso: docker compose -f docker-compose.prod.yml up -d --build
+#
+# Diferenças em relação ao desenvolvimento:
+#  - Código, vendor e assets compilados são baked na imagem (sem bind mounts)
+#  - APP_ENV=production / APP_DEBUG=0
+#  - Porta 5173 (Vite dev) não está exposta
+#  - Mailpit removido
+#  - Queue worker usa a mesma imagem de produção
+#  - Rede internalApp isolada (internal: true): db e redis inacessíveis de fora do stack
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/app/Dockerfile.prod
+    ports:
+      - "${APP_PORT:-80}:80"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: '0'
+      DB_HOST: db
+      DB_PORT: '3306'
+      REDIS_HOST: redis
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    volumes:
+      - ./.env:/var/www/html/.env
+      - ./storage:/var/www/html/storage
+      - ./docker/app/php.ini:/usr/local/etc/php/php.ini
+    networks:
+      - internalApp
+      - localApp
+
+  queue:
+    build:
+      context: .
+      dockerfile: ./docker/app/Dockerfile.prod
+    environment:
+      APP_ENV: production
+      APP_DEBUG: '0'
+      DB_HOST: db
+      DB_PORT: '3306'
+      REDIS_HOST: redis
+    volumes:
+      - ./.env:/var/www/html/.env
+      - ./storage:/var/www/html/storage
+    depends_on:
+      - db
+      - redis
+      - app
+    entrypoint: ["php", "/var/www/html/artisan"]
+    command: ["queue:work", "--queue=notifications,default", "--tries=3", "--timeout=90", "--sleep=3"]
+    restart: unless-stopped
+    networks:
+      - internalApp
+
+  db:
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_DATABASE:-laravel_app}
+      MYSQL_PORT: "3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internalApp
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    networks:
+      - internalApp
+    # sem port binding — acessível apenas pela rede internalApp
+
+volumes:
+  dbdata:
+  redisdata:
+
+networks:
+  internalApp:
+    driver: bridge
+    internal: true  # sem rota para fora do Docker; evita conflitos com outros stacks
+  localApp:
+    driver: bridge

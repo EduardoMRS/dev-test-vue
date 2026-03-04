@@ -1,0 +1,36 @@
+#!/bin/sh
+# utilizado para executar comandos artisan do laravel dentro do container ou outras ações nos containers
+
+# Carrega APP_ENV do .env se não estiver no ambiente do shell
+if [ -z "$APP_ENV" ] && [ -f "$(dirname "$0")/.env" ]; then
+  APP_ENV=$(grep -E '^APP_ENV=' "$(dirname "$0")/.env" | cut -d '=' -f2 | tr -d '"' | tr -d "'" | tr -d '[:space:]')
+fi
+
+# Mapeia APP_ENV para o nome do compose file
+# production → docker-compose.prod.yml
+# local/staging/etc → docker-compose.yml (dev)
+case "$APP_ENV" in
+  production) COMPOSE_FILE="docker-compose.prod.yml" ;;
+  *)          COMPOSE_FILE="docker-compose.yml" ;;
+esac
+case "$1" in
+    php)
+        shift
+        docker compose -f "$COMPOSE_FILE" exec app php "$@"
+        ;;
+    mysql)
+        shift
+        docker compose -f "$COMPOSE_FILE" exec db mysql -u"root" -p"${DB_PASSWORD:-root}" "$@"
+        ;;
+    redis)
+        shift
+        docker compose -f "$COMPOSE_FILE" exec redis redis-cli "$@"
+        ;;
+    logs)
+        shift
+        docker compose -f "$COMPOSE_FILE" logs -f "$@"
+        ;;
+    *)
+        docker compose -f "$COMPOSE_FILE" exec app php artisan "$@"
+        ;;
+esac

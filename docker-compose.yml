@@ -1,0 +1,124 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: ./docker/app/Dockerfile
+    ports:
+      - "80:80"
+      - "5173:5173"
+    env_file: .env
+    environment:
+      APP_ENV: local
+      APP_DEBUG: '1'
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: '5432'
+      REDIS_HOST: redis
+    volumes:
+      - ./:/var/www/html
+      - ./vendor:/var/www/html/vendor
+      - ./node_modules:/var/www/html/node_modules
+      - ./docker/app/php.ini:/usr/local/etc/php/php.ini:ro
+    depends_on:
+      - db
+      - redis
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    networks:
+      - internalApp
+      - localApp
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-root}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-root}
+      POSTGRES_DB: ${DB_DATABASE:-laravel_app}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internalApp
+      - localApp
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - internalApp
+      - localApp
+
+  queue:
+    image: php:8.3-cli
+    env_file: .env
+    environment:
+      APP_ENV: local
+      APP_DEBUG: '1'
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: '5432'
+      REDIS_HOST: redis
+    volumes:
+      - ./:/var/www/html
+      - ./vendor:/var/www/html/vendor
+    depends_on:
+      - db
+      - redis
+      - app
+    entrypoint: ["php", "/var/www/html/artisan"]
+    command: ["queue:work", "--queue=notifications,default", "--tries=3", "--timeout=90", "--sleep=3"]
+    restart: unless-stopped
+    networks:
+      - internalApp
+      - localApp
+
+  mail:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - internalApp
+      - localApp
+
+  scheduler:
+    image: php:8.3-cli
+    env_file: .env
+    environment:
+      APP_ENV: local
+      APP_DEBUG: '1'
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: '5432'
+      REDIS_HOST: redis
+    volumes:
+      - ./:/var/www/html
+      - ./vendor:/var/www/html/vendor
+    depends_on:
+      - db
+      - redis
+      - app
+    entrypoint: ["sh", "-c", "while true; do php /var/www/html/artisan schedule:run --verbose --no-interaction >> /var/www/html/storage/logs/scheduler.log 2>&1; sleep 60; done"]
+    restart: unless-stopped
+    networks:
+      - internalApp
+      - localApp
+
+volumes:
+  dbdata:
+  redisdata:
+
+networks:
+  internalApp:
+    driver: bridge
+    internal: false
+  localApp:
+    driver: bridge
