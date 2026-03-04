@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: ./docker/app/Dockerfile
     ports:
-      - "80:80"
+      - "${APP_PORT:-80}:80"
       - "5173:5173"
     env_file: .env
     environment:
@@ -23,6 +23,29 @@ services:
       - db
       - redis
     entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    networks:
+      - internalApp
+      - localApp
+  queue:
+    image: php:8.3-cli
+    env_file: .env
+    environment:
+      APP_ENV: local
+      APP_DEBUG: '1'
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: '5432'
+      REDIS_HOST: redis
+    volumes:
+      - ./:/var/www/html
+      - ./vendor:/var/www/html/vendor
+    depends_on:
+      - db
+      - redis
+      - app
+    entrypoint: ["php", "/var/www/html/artisan"]
+    command: ["queue:work", "--queue=notifications,default", "--tries=3", "--timeout=90", "--sleep=3"]
+    restart: unless-stopped
     networks:
       - internalApp
       - localApp
@@ -54,60 +77,13 @@ services:
       - redisdata:/data
     networks:
       - internalApp
-      - localApp
-
-  queue:
-    image: php:8.3-cli
-    env_file: .env
-    environment:
-      APP_ENV: local
-      APP_DEBUG: '1'
-      DB_CONNECTION: pgsql
-      DB_HOST: db
-      DB_PORT: '5432'
-      REDIS_HOST: redis
-    volumes:
-      - ./:/var/www/html
-      - ./vendor:/var/www/html/vendor
-    depends_on:
-      - db
-      - redis
-      - app
-    entrypoint: ["php", "/var/www/html/artisan"]
-    command: ["queue:work", "--queue=notifications,default", "--tries=3", "--timeout=90", "--sleep=3"]
-    restart: unless-stopped
-    networks:
-      - internalApp
-      - localApp
+      - localApp  
 
   mail:
     image: axllent/mailpit:latest
     ports:
       - "1025:1025"
       - "8025:8025"
-    networks:
-      - internalApp
-      - localApp
-
-  scheduler:
-    image: php:8.3-cli
-    env_file: .env
-    environment:
-      APP_ENV: local
-      APP_DEBUG: '1'
-      DB_CONNECTION: pgsql
-      DB_HOST: db
-      DB_PORT: '5432'
-      REDIS_HOST: redis
-    volumes:
-      - ./:/var/www/html
-      - ./vendor:/var/www/html/vendor
-    depends_on:
-      - db
-      - redis
-      - app
-    entrypoint: ["sh", "-c", "while true; do php /var/www/html/artisan schedule:run --verbose --no-interaction >> /var/www/html/storage/logs/scheduler.log 2>&1; sleep 60; done"]
-    restart: unless-stopped
     networks:
       - internalApp
       - localApp

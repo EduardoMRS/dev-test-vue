@@ -1,6 +1,5 @@
 # ============================================================
 # Stage 1: Builder — PHP + Composer + Node + Vite build
-# Precisamos de PHP aqui porque o plugin wayfinder chama
 # `php artisan wayfinder:generate` durante o `vite build`.
 # ============================================================
 FROM dunglas/frankenphp:1.3-php8.3-bookworm AS builder
@@ -114,5 +113,9 @@ RUN mkdir -p storage/framework/{sessions,views,cache} bootstrap/cache \
 
 COPY ./docker/app/entrypoint.prod.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY ./laravel-cron /etc/cron.d/laravel-cron
+RUN chmod 0644 /etc/cron.d/laravel-cron \
+    && crontab /etc/cron.d/laravel-cron
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
