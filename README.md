@@ -97,6 +97,14 @@ database/
 mcp/                                       # Documentação MCP para IAs
 ```
 
+#### Algumas observações
+- Migrations e Seeders rodam sozinhas ao subir o container e atraves do comando ./art migrate:seed
+- Scheduler roda automatica por padrão
+- Envio de email e push podem ser testados atraves de $user->sendPush({'titulo', 'conteudo'}) e $user->sendMail('titulo', 'conteudo') sendo $user referencia a algum usuário
+- Teste de Scheduler pode ser feito atraves de ""./art tasks:send-reminders" 
+- Para poupar tempo e entregar o teste antes do prazo com os requisitos levantados optei por pegar alguns assets prontos e apenas fazer ajustes para que funcionem no Vue.js 3, destes a base **Laravel + Vue**, **ConxtextMenu**, e Ui do **Reka-UI**
+
+
 ## Comandos úteis
 
 ```bash
