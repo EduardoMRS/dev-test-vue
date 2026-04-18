@@ -30,7 +30,7 @@ Este projeto foi desenvolvido com base no repositório [laravel/vue-starter-kit]
 
 ```bash
 # 1. Clone o repositório
-gh repo clone EduardoMRS/coloni-dev-test && cd coloni-dev-test
+gh repo clone EduardoMRS/dev-test-vue && cd dev-test-vue
 
 # 2. Copie e ajuste o .env
 cp .env.example .env
